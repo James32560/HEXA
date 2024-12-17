@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Hexa</title>
+
+    <script src='joy.js'></script>
+
+    <style>
+        body
+        {
+            font-family: 'Consolas', monospace;
+            margin: 20px;
+        }
+        button
+        {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        .container
+        {
+            display: flex;
+            justify-content: center;
+            position: absolute;
+            top: 140px;
+            left: 0;
+            margin: 0;
+        }
+        .wrapper
+        {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .vertical_slider
+        {
+            writing-mode: vertical-lr;
+            direction: rtl;
+            width: 8px;
+            height: 200px;
+            margin-left: 20px;
+        }
+        #gaitButton
+        {
+            margin-top: 20px;
+        }
+        #joyX
+        {
+            margin-top: 200px;
+            margin-left: 10px;
+        }
+        #joyY
+        {
+            margin-left: 10px;
+        }
+        #joyZ
+        {
+            margin-left: 10px;
+        }
+        #duration
+        {
+            margin-left: 10px;
+        }
+        #status
+        {
+            margin-top: 40px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <button id='connectButton'>Connect to ESP32</button>
+        <div class='container'>
+            <div id='joyDiv' style='width:200px;height:200px;margin-bottom:20px;'></div>
+
+            <input type='range' min='0.0' max='20.0' value='0' step='0.1' class='vertical_slider' id='joyZSlider'>
+            <input type='range' min='0' max='20000' value='0' step='1' class='vertical_slider' id='durationSlider'>
+        </div>
+        <button id='gaitButton'>Gait: Stance</button>
+        <span id='joyX'>X: 0</span>
+        <span id='joyY'>Y: 0</span>
+        <span id='joyZ'>Z: 0</span>
+        <span id='duration'>Duration: 0 ms</span>
+        <span id='status'></span>
+    </div>
+
+    <script>
+        // JSON Variable
+        var gait = 'Stance', joyX = 0, joyY = 0, joyZ = 0;
+        var server = null, service = null, characteristic = null;
+
+        const servicesID = '0000ffe0-0000-1000-8000-00805f9b34fb';
+        const characteristicID = '0000ffe1-0000-1000-8000-00805f9b34fb';
+        document.getElementById('connectButton').addEventListener('click', async () =>
+        {
+            try
+            {
+                bluetoothDevice = await navigator.bluetooth.requestDevice({filters: [{ services: [servicesID] }] });
+
+                server = await bluetoothDevice.gatt.connect();
+                service = await server.getPrimaryService(servicesID);
+                characteristic = await service.getCharacteristic(characteristicID);
+
+                document.getElementById('status').innerText = 'Connected to ESP32';
+            }
+            catch(error)
+            {
+                document.getElementById('status').innerText = 'Connection Failed: ' + error;
+            }
+        });
+
+        var joy = new JoyStick('joyDiv', {"limitToCircle": true}, function(stickData)
+        {
+            joyX = stickData.x / 100;
+            joyY = stickData.y / 100;
+            document.getElementById('joyX').innerText = 'X: ' + joyX;
+            document.getElementById('joyY').innerText = 'Y: ' + joyY;
+        });
+
+        const gaits = ['Stance', 'Tripod'];
+        var gaitIndex = 0;
+        gaitButton.addEventListener('click', function()
+        {
+            gaitIndex = (gaitIndex + 1) % gaits.length;
+            gait = gaits[gaitIndex];
+            gaitButton.innerHTML = 'Gait: ' + gait;
+        });
+
+        joyZSlider.addEventListener('input', function()
+        {
+            joyZ = joyZSlider.value;
+            document.getElementById('joyZ').innerText = 'Z: ' + joyZ;
+        });
+
+        durationSlider.addEventListener('input', function()
+        {
+            document.getElementById('duration').innerText = 'Duration: ' + durationSlider.value + ' ms';
+        });
+
+        async function sendData()
+        {
+            var data = {gait: gait, joyX: joyX, joyY: joyY, joyZ: joyZ};
+            var JSONData = JSON.stringify(data);
+
+            if(!characteristic)
+            {
+                document.getElementById('status').innerText = 'No Connection';
+                return;
+            }
+            try
+            {
+                await characteristic.writeValue(new TextEncoder().encode(JSONData));
+                document.getElementById('status').innerText = 'Data Sent: ' + JSONData;
+            }
+            catch(error)
+            {
+                document.getElementById('status').innerText = error;
+            }
+        }
+        setInterval(sendData, 100);
+    </script>
+</body>
+</html>
